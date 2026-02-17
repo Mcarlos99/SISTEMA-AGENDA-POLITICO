@@ -9,9 +9,9 @@
 //   BANCO DE DADOS
 // ============================================================
 define('DB_HOST',    'localhost');
-define('DB_NAME',    'polix_saas');
-define('DB_USER',    'polix_user');
-define('DB_PASS',    'ALTERE_ESTA_SENHA');
+define('DB_NAME',    'extremes_politico');
+define('DB_USER',    'extremes_politicouser');
+define('DB_PASS',    'hZz@G.[SK1.pN.X~');
 define('DB_CHARSET', 'utf8mb4');
 
 // ============================================================
@@ -20,7 +20,7 @@ define('DB_CHARSET', 'utf8mb4');
 define('PLATFORM_NAME',    'Extreme - PoLiX');
 define('PLATFORM_SUBTITLE','Agenda Política Profissional');
 define('PLATFORM_VERSION', '3.0.0');
-define('PLATFORM_URL',     'https://seudominio.com.br'); // sem barra final
+define('PLATFORM_URL',     'https://extremesti.com.br/polix'); // sem barra final
 define('TIMEZONE',         'America/Sao_Paulo');
 
 // ============================================================

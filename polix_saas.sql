@@ -10,10 +10,10 @@ START TRANSACTION;
 SET time_zone = "+00:00";
 SET NAMES utf8mb4;
 
-CREATE DATABASE IF NOT EXISTS `polix_saas`
+CREATE DATABASE IF NOT EXISTS `extremes_politico`
     DEFAULT CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
-USE `polix_saas`;
+USE `extremes_politico`;
 
 -- -----------------------------------------------------------
 --  PLANOS DE ASSINATURA
