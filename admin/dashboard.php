@@ -100,6 +100,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $msg = 'Cadastro excluído.'; $msgType = 'success';
         }
     }
+
+    // Novo cadastro (criado pelo admin)
+    if ($action === 'novo_cadastro') {
+        $nome     = sanitizeInput($_POST['nome']       ?? '');
+        $cidade   = sanitizeInput($_POST['cidade']     ?? '');
+        $cargo    = sanitizeInput($_POST['cargo']      ?? '');
+        $tel      = preg_replace('/\D/', '', sanitizeInput($_POST['telefone'] ?? ''));
+        $email    = sanitizeInput($_POST['email']      ?? '');
+        $nasc     = sanitizeInput($_POST['nascimento'] ?? '');
+        $cat      = sanitizeInput($_POST['categoria']  ?? 'eleitor');
+        $obs      = sanitizeInput($_POST['observacoes']       ?? '');
+        $obsAdm   = sanitizeInput($_POST['observacoes_admin'] ?? '');
+        $partido  = sanitizeInput($_POST['partido_vinculo']   ?? '');
+        $nivel    = sanitizeInput($_POST['nivel_politico']    ?? '');
+
+        $dataNasc = '';
+        if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $nasc, $m)) {
+            $dataNasc = "{$m[3]}-{$m[2]}-{$m[1]}";
+        }
+
+        $erros = [];
+        if (strlen($nome) < 3)      $erros[] = 'Nome obrigatório.';
+        if (empty($cidade))         $erros[] = 'Cidade obrigatória.';
+        if (strlen($tel) < 10)      $erros[] = 'Telefone inválido.';
+        if (empty($dataNasc))       $erros[] = 'Data de nascimento inválida.';
+        if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) $erros[] = 'E-mail inválido.';
+
+        if (empty($erros)) {
+            // Verifica duplicata de telefone no tenant
+            $ck = $db->prepare('SELECT id FROM cadastros WHERE tenant_id=? AND telefone=? LIMIT 1');
+            $ck->execute([$tenantId, $tel]);
+            if ($ck->fetch()) {
+                $erros[] = 'Telefone já cadastrado.';
+            }
+        }
+
+        if (empty($erros)) {
+            try {
+                $stmt = $db->prepare(
+                    'INSERT INTO cadastros
+                        (tenant_id, nome, cidade, cargo, telefone, email, data_nascimento,
+                         categoria, observacoes, observacoes_admin, partido_vinculo,
+                         nivel_politico, ip_address)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)'
+                );
+                $stmt->execute([
+                    $tenantId, $nome, $cidade, $cargo, $tel,
+                    $email ?: null, $dataNasc, $cat,
+                    $obs ?: null, $obsAdm ?: null,
+                    $partido ?: null, $nivel ?: null,
+                    getClientIP(),
+                ]);
+                logActivity($tenantId, 'novo_cadastro_admin', "Cadastro: $nome | $cidade | $tel por $adminNome");
+                $msg = "Cadastro de \"$nome\" criado com sucesso!"; $msgType = 'success';
+            } catch (Exception $e) {
+                error_log('PoLiX novo_cadastro_admin: ' . $e->getMessage());
+                $msg = 'Erro ao salvar: ' . $e->getMessage(); $msgType = 'error';
+            }
+        } else {
+            $msg = implode(' | ', $erros); $msgType = 'error';
+        }
+    }
 }
 
 // --- Filtros ------------------------------------------------------------------
@@ -356,6 +418,7 @@ tr:hover td{background:#f7f9fc}
   </div>
   <div class="hactions">
     <span class="user-badge">👤 <?= htmlspecialchars($adminNome) ?></span>
+    <button class="hbtn" onclick="openNovo()" style="background:rgba(255,255,255,.3);font-weight:700">➕ Novo Cadastro</button>
     <?php if ($tenant['tem_calendario'] ?? true): ?>
     <a class="hbtn" href="<?= htmlspecialchars(tenantUrl($tenant, 'admin/calendario')) ?>">📅 Calendário</a>
     <?php endif ?>
@@ -788,10 +851,104 @@ function copiarUmExcel(id){
 // --- Utilitário esc ---
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+// --- Modal Novo Cadastro ---
+function openNovo(){
+  document.getElementById('overlayNovo').classList.add('show');
+  document.getElementById('novoNome').focus();
+}
+function closeNovo(){
+  document.getElementById('overlayNovo').classList.remove('show');
+  document.getElementById('formNovo').reset();
+}
+document.addEventListener('keydown', e=>{ if(e.key==='Escape'){closeView();closeEdit();closeNovo();} });
+
+document.getElementById('novoTelefone').addEventListener('input', function(){
+  let v=this.value.replace(/\D/g,'').substring(0,11);
+  if(v.length>10) v=v.replace(/^(\d{2})(\d{5})(\d{4})$/,'($1) $2-$3');
+  else if(v.length>6) v=v.replace(/^(\d{2})(\d{4})(\d*)$/,'($1) $2-$3');
+  else if(v.length>2) v=v.replace(/^(\d{2})(\d*)$/,'($1) $2');
+  this.value=v;
+});
+document.getElementById('novoNascimento').addEventListener('input', function(){
+  let v=this.value.replace(/\D/g,'').substring(0,8);
+  if(v.length>4) v=v.replace(/^(\d{2})(\d{2})(\d*)$/,'$1/$2/$3');
+  else if(v.length>2) v=v.replace(/^(\d{2})(\d*)$/,'$1/$2');
+  this.value=v;
+});
+
 // Auto-hide msg
 <?php if ($msg): ?>
 setTimeout(()=>{ const a=document.getElementById('alertMsg'); if(a) a.style.display='none'; }, 6000);
 <?php endif ?>
 </script>
+
+<!-- MODAL NOVO CADASTRO -->
+<div class="modal-overlay" id="overlayNovo" onclick="if(event.target===this)closeNovo()">
+  <div class="modal" style="max-width:640px">
+    <div class="modal-header" style="background:linear-gradient(135deg,#1b5e20,#2e7d32);padding:22px 24px 14px;display:flex;align-items:center;justify-content:space-between">
+      <h2 style="color:#fff;font-size:1rem">➕ Novo Cadastro</h2>
+      <button class="modal-close" onclick="closeNovo()">✕</button>
+    </div>
+    <div class="modal-body">
+      <form method="POST" id="formNovo">
+        <input type="hidden" name="action" value="novo_cadastro">
+        <input type="hidden" name="slug" value="<?= htmlspecialchars($tenant['slug']) ?>">
+        <div class="edit-grid">
+          <div class="edit-group full">
+            <label>Nome Completo *</label>
+            <input type="text" name="nome" id="novoNome" required placeholder="Nome completo">
+          </div>
+          <div class="edit-group">
+            <label>Cidade *</label>
+            <input type="text" name="cidade" required placeholder="Cidade">
+          </div>
+          <div class="edit-group">
+            <label>Cargo / Ocupação</label>
+            <input type="text" name="cargo" placeholder="Ex: Professor, Vereador...">
+          </div>
+          <div class="edit-group">
+            <label>Telefone / WhatsApp *</label>
+            <input type="tel" name="telefone" id="novoTelefone" required maxlength="15" placeholder="(00) 00000-0000">
+          </div>
+          <div class="edit-group">
+            <label>E-mail</label>
+            <input type="email" name="email" placeholder="email@exemplo.com">
+          </div>
+          <div class="edit-group">
+            <label>Nascimento (DD/MM/AAAA) *</label>
+            <input type="text" name="nascimento" id="novoNascimento" required maxlength="10" placeholder="DD/MM/AAAA">
+          </div>
+          <div class="edit-group">
+            <label>Categoria</label>
+            <select name="categoria">
+              <?php foreach ($categorias as $val => $lbl): ?>
+              <option value="<?= $val ?>"><?= htmlspecialchars($lbl) ?></option>
+              <?php endforeach ?>
+            </select>
+          </div>
+          <div class="edit-group">
+            <label>Partido Vínculo</label>
+            <input type="text" name="partido_vinculo" placeholder="Ex: MDB, PT...">
+          </div>
+          <div class="edit-group full">
+            <label>Observações</label>
+            <textarea name="observacoes" placeholder="Anotações gerais..."></textarea>
+          </div>
+          <div class="edit-group full">
+            <label>⭐ Observações Administrativas (interno)</label>
+            <textarea name="observacoes_admin" class="obs-admin-input" placeholder="Notas internas do gabinete..."></textarea>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button type="button" class="mbtn mbtn-gray" onclick="closeNovo()">Cancelar</button>
+          <button type="submit" class="mbtn" style="background:linear-gradient(135deg,#1b5e20,#2e7d32);color:#fff">
+            💾 Salvar Cadastro
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
