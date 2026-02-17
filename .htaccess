@@ -1,0 +1,34 @@
+# =============================================================
+#   Extreme - PoLiX SaaS  |  .htaccess  v3.0
+#   Roteamento multi-tenant por slug de URL
+# =============================================================
+
+Options -Indexes
+RewriteEngine On
+
+# Segurança: bloqueia acesso direto a arquivos sensíveis
+RewriteRule ^config\.php$ - [F,L]
+RewriteRule ^.*\.sql$     - [F,L]
+
+# Arquivos e diretórios existentes passam direto
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# /{slug}/admin/  →  admin/index.php?slug={slug}&path={resto}
+RewriteRule ^([a-z0-9\-]+)/admin/(.*)$ admin/index.php?slug=$1&path=$2 [QSA,L]
+RewriteRule ^([a-z0-9\-]+)/admin/?$    admin/index.php?slug=$1 [QSA,L]
+
+# /{slug}/verificar_duplicata.php
+RewriteRule ^([a-z0-9\-]+)/verificar_duplicata\.php$ verificar_duplicata.php?slug=$1 [QSA,L]
+
+# /{slug}/  →  index.php?slug={slug}
+RewriteRule ^([a-z0-9\-]+)/?$ index.php?slug=$1 [QSA,L]
+
+# Raiz  →  landing da plataforma
+RewriteRule ^$ landing.php [L]
+
+# Headers de segurança
+Header always set X-Frame-Options "SAMEORIGIN"
+Header always set X-Content-Type-Options "nosniff"
+Header always set Referrer-Policy "strict-origin-when-cross-origin"

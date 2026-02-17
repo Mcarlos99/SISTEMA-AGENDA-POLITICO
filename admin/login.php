@@ -1,250 +1,126 @@
 <?php
-require_once '../config.php';
+// =============================================================
+//   Extreme - PoLiX SaaS  |  admin/login.php
+//   Autenticação do administrador de tenant
+//   v3.0  |  Desenvolvido por: Mauro Carlos (94) 98170-9809
+// =============================================================
+require_once __DIR__ . '/../config.php';
 
-$error = '';
+$tenant = resolveTenant();
+if (!$tenant) { http_response_code(404); die('Tenant não encontrado.'); }
 
-// Verificar se já está logado
-if (isset($_SESSION[ADMIN_SESSION_NAME])) {
-    header('Location: dashboard.php');
+$tenantId = (int)$tenant['id'];
+$slug     = $tenant['slug'];
+
+// Já autenticado → redireciona
+if (!empty($_SESSION[SESSION_TENANT_ADMIN]['tenant_id'])
+    && $_SESSION[SESSION_TENANT_ADMIN]['tenant_id'] === $tenantId) {
+    header('Location: ' . tenantUrl($tenant, 'admin/'));
     exit;
 }
 
-// Processar login
-if ($_SERVER['REQUEST_METHOD'] == 'POST') {
-    try {
-        $usuario = sanitizeInput($_POST['usuario']);
-        $senha = $_POST['senha'];
-        
-        if (empty($usuario) || empty($senha)) {
-            throw new Exception('Usuário e senha são obrigatórios.');
-        }
-        
-        $db = new Database();
-        $pdo = $db->getConnection();
-        
-        $stmt = $pdo->prepare("SELECT id, usuario, senha, nome FROM administradores WHERE usuario = ? AND status = 'ativo'");
-        $stmt->execute([$usuario]);
-        $admin = $stmt->fetch();
-        
-        if ($admin && password_verify($senha, $admin['senha'])) {
-            // Login bem-sucedido
-            $_SESSION[ADMIN_SESSION_NAME] = [
-                'id' => $admin['id'],
-                'usuario' => $admin['usuario'],
-                'nome' => $admin['nome'],
-                'login_time' => time()
+$erro = '';
+$db   = Database::getInstance();
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $usuario = sanitizeInput($_POST['usuario'] ?? '');
+    $senha   = $_POST['senha'] ?? '';
+
+    if ($usuario && $senha) {
+        $stmt = $db->prepare(
+            'SELECT * FROM administradores
+              WHERE tenant_id = ? AND usuario = ? AND status = "ativo" LIMIT 1'
+        );
+        $stmt->execute([$tenantId, $usuario]);
+        $adm = $stmt->fetch();
+
+        if ($adm && password_verify($senha, $adm['senha'])) {
+            // Atualiza último acesso
+            $db->prepare('UPDATE administradores SET ultimo_acesso = NOW() WHERE id = ?')
+               ->execute([$adm['id']]);
+
+            $_SESSION[SESSION_TENANT_ADMIN] = [
+                'id'        => $adm['id'],
+                'tenant_id' => $tenantId,
+                'usuario'   => $adm['usuario'],
+                'nome'      => $adm['nome'],
+                'nivel'     => $adm['nivel'],
             ];
-            
-            // Atualizar último acesso
-            $stmt = $pdo->prepare("UPDATE administradores SET ultimo_acesso = NOW() WHERE id = ?");
-            $stmt->execute([$admin['id']]);
-            
-            // Log do login
-            logActivity('admin_login', "Login realizado por: " . $admin['usuario']);
-            
-            header('Location: dashboard.php');
+            logActivity($tenantId, 'login_sucesso', "Admin: {$adm['usuario']}");
+            header('Location: ' . tenantUrl($tenant, 'admin/'));
             exit;
         } else {
-            throw new Exception('Usuário ou senha incorretos.');
+            $erro = 'Usuário ou senha incorretos.';
+            logActivity($tenantId, 'login_falha', "Tentativa: $usuario");
         }
-        
-    } catch (Exception $e) {
-        $error = $e->getMessage();
-        logActivity('admin_login', "Tentativa de login falhada: $usuario");
+    } else {
+        $erro = 'Preencha todos os campos.';
     }
 }
+
+$logout  = isset($_GET['logout']);
+$c1      = htmlspecialchars($tenant['cor_primaria']   ?: '#003366');
+$c2      = htmlspecialchars($tenant['cor_secundaria'] ?: '#0055aa');
+$c3      = htmlspecialchars($tenant['cor_acento']     ?: '#0077cc');
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Administrativo - <?php echo SITE_NAME; ?></title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Arial', sans-serif;
-            background: linear-gradient(135deg, #003366, #0066cc);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-
-        .login-container {
-            background: white;
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-            width: 100%;
-            max-width: 400px;
-            animation: slideUp 0.8s ease-out;
-        }
-
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(50px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        .login-header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-
-        .login-header h1 {
-            color: #003366;
-            font-size: 2em;
-            margin-bottom: 10px;
-        }
-
-        .login-header p {
-            color: #666;
-            font-size: 1.1em;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #003366;
-            font-weight: bold;
-        }
-
-        .form-group input {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1em;
-            transition: all 0.3s ease;
-        }
-
-        .form-group input:focus {
-            outline: none;
-            border-color: #0066cc;
-            box-shadow: 0 0 10px rgba(0, 102, 204, 0.2);
-        }
-
-        .btn-login {
-            width: 100%;
-            background: linear-gradient(135deg, #003366, #0066cc);
-            color: white;
-            padding: 15px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1em;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 20px;
-        }
-
-        .btn-login:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 102, 204, 0.3);
-        }
-
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            border: 1px solid #f5c6cb;
-        }
-
-        .back-link {
-            text-align: center;
-            margin-top: 20px;
-        }
-
-        .back-link a {
-            color: #003366;
-            text-decoration: none;
-            font-weight: bold;
-        }
-
-        .back-link a:hover {
-            text-decoration: underline;
-        }
-
-        .security-info {
-            background: #e7f3ff;
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 20px;
-            font-size: 0.9em;
-            color: #004085;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Login Admin — <?= htmlspecialchars($tenant['nome_politico']) ?></title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;background:linear-gradient(135deg,<?= $c1 ?>,<?= $c2 ?>);min-height:100vh;display:flex;align-items:center;justify-content:center}
+.box{background:#fff;border-radius:16px;box-shadow:0 20px 60px rgba(0,0,0,.3);width:100%;max-width:400px;overflow:hidden}
+.header{background:linear-gradient(135deg,<?= $c1 ?>,<?= $c2 ?>);color:#fff;padding:30px;text-align:center}
+.header .badge{background:rgba(255,255,255,.2);border-radius:20px;padding:3px 12px;font-size:10px;letter-spacing:1px;text-transform:uppercase;display:inline-block;margin-bottom:10px}
+.header h1{font-size:1.2rem;margin-bottom:4px}
+.header .sub{font-size:.8rem;opacity:.8}
+.body{padding:30px}
+.form-group{margin-bottom:18px}
+.form-group label{display:block;font-size:.82rem;color:#555;font-weight:600;margin-bottom:5px}
+.form-group input{width:100%;padding:11px 14px;border:2px solid #e0e8f0;border-radius:8px;font-size:.95rem;transition:border-color .2s}
+.form-group input:focus{outline:none;border-color:<?= $c3 ?>}
+.btn{width:100%;padding:13px;background:linear-gradient(135deg,<?= $c1 ?>,<?= $c2 ?>);color:#fff;border:none;border-radius:8px;font-size:1rem;font-weight:700;cursor:pointer;transition:opacity .2s}
+.btn:hover{opacity:.9}
+.alert{padding:12px;border-radius:8px;margin-bottom:18px;font-size:.88rem;text-align:center}
+.alert-error{background:#f8d7da;color:#721c24}
+.alert-success{background:#d4edda;color:#155724}
+.footer{text-align:center;padding:16px;font-size:.75rem;color:#aaa;border-top:1px solid #f0f4f8}
+.footer a{color:<?= $c3 ?>;text-decoration:none}
+</style>
 </head>
 <body>
-    <div class="login-container">
-        <div class="login-header">
-            <h1>Área Administrativa</h1>
-            <p>Deputado Chamonzinho - MDB</p>
-        </div>
-
-        <?php if ($error): ?>
-            <div class="error-message">
-                <?php echo $error; ?>
-            </div>
-        <?php endif; ?>
-
-        <form method="POST" action="">
-            <div class="form-group">
-                <label for="usuario">Usuário</label>
-                <input type="text" id="usuario" name="usuario" required autofocus>
-            </div>
-
-            <div class="form-group">
-                <label for="senha">Senha</label>
-                <input type="password" id="senha" name="senha" required>
-            </div>
-
-            <button type="submit" class="btn-login">Entrar</button>
-        </form>
-
-        <div class="back-link">
-            <a href="../index.php">← Voltar ao Formulário</a>
-        </div>
-
-        <div class="security-info">
-            <strong>Acesso Restrito:</strong> Esta área é destinada apenas a administradores autorizados.
-        </div>
-    </div>
-
-    <script>
-        // Prevenir ataques de força bruta
-        let tentativas = 0;
-        const maxTentativas = 3;
-        
-        document.querySelector('form').addEventListener('submit', function(e) {
-            if (tentativas >= maxTentativas) {
-                e.preventDefault();
-                alert('Muitas tentativas de login. Tente novamente em alguns minutos.');
-                return false;
-            }
-            
-            <?php if ($error): ?>
-            tentativas++;
-            <?php endif; ?>
-        });
-    </script>
+<div class="box">
+  <div class="header">
+    <div class="badge"><?= PLATFORM_NAME ?> · Admin</div>
+    <h1><?= htmlspecialchars($tenant['nome_politico']) ?></h1>
+    <div class="sub"><?= htmlspecialchars($tenant['cargo']) ?></div>
+  </div>
+  <div class="body">
+    <?php if ($logout): ?>
+      <div class="alert alert-success">Você saiu com segurança.</div>
+    <?php endif ?>
+    <?php if ($erro): ?>
+      <div class="alert alert-error"><?= htmlspecialchars($erro) ?></div>
+    <?php endif ?>
+    <form method="POST">
+      <div class="form-group">
+        <label for="usuario">Usuário</label>
+        <input type="text" id="usuario" name="usuario" required autofocus
+               value="<?= htmlspecialchars($_POST['usuario'] ?? '') ?>">
+      </div>
+      <div class="form-group">
+        <label for="senha">Senha</label>
+        <input type="password" id="senha" name="senha" required>
+      </div>
+      <button type="submit" class="btn">🔐 ENTRAR</button>
+    </form>
+  </div>
+  <div class="footer">
+    Desenvolvido por <a href="https://wa.me/<?= DEV_WHATSAPP ?>" target="_blank"><?= DEV_NOME ?></a>
+  </div>
+</div>
 </body>
 </html>
