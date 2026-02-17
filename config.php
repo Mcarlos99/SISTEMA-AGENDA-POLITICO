@@ -3,14 +3,14 @@
 //DepChamon - Admin@!010203
 // Configurações do banco de dados
 define('DB_HOST', 'localhost');
-define('DB_NAME', 'extremes_deputado_chamonzinho');
-define('DB_USER', 'extremes_chamonzinho'); // Altere conforme seu usuário MySQL
-define('DB_PASS', 'fu7@tAq%UQyB#T;e'); // Altere conforme sua senha MySQL
+define('DB_NAME', 'extremes_politico');
+define('DB_USER', 'extremes_politicouser'); // Altere conforme seu usuário MySQL
+define('DB_PASS', 'hZz@G.[SK1.pN.X~'); // Altere conforme sua senha MySQL
 define('DB_CHARSET', 'utf8mb4');
 
 // Configurações do sistema
-define('SITE_NAME', 'Deputado Chamonzinho - MDB');
-define('ADMIN_SESSION_NAME', 'chamonzinho_admin');
+define('SITE_NAME', 'Extreme - PoLiX');
+define('ADMIN_SESSION_NAME', 'PoLiX - admin');
 define('TIMEZONE', 'America/Sao_Paulo');
 
 // Configurar timezone
