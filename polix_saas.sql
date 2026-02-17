@@ -10,10 +10,10 @@ START TRANSACTION;
 SET time_zone = "+00:00";
 SET NAMES utf8mb4;
 
-CREATE DATABASE IF NOT EXISTS `extremes_politico`
+CREATE DATABASE IF NOT EXISTS `polix_saas`
     DEFAULT CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
-USE `extremes_politico`;
+USE `polix_saas`;
 
 -- -----------------------------------------------------------
 --  PLANOS DE ASSINATURA
@@ -92,7 +92,7 @@ CREATE TABLE `super_admins` (
 
 -- Senha padrão: SuperAdmin@2025  (ALTERE IMEDIATAMENTE)
 INSERT INTO `super_admins` (`usuario`, `senha`, `nome`) VALUES
-    ('superadmin', '$2y$12$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'Super Administrador');
+    ('superadmin', '$2y$12$O5CFsbddndV8d3oIYYSw6.N/JcwrjNLc/r2nOtKF3CBBWq64OUo3m', 'Super Administrador');
 
 -- -----------------------------------------------------------
 --  ADMINISTRADORES DE TENANT

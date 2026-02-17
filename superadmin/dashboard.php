@@ -37,11 +37,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $aNome    = sanitizeInput($_POST['admin_nome']   ?? $nome);
 
         if ($nome && $cargo && $slug && strlen($slug) >= 3 && $aUsuario && strlen($aSenha) >= 6) {
-            // Verifica slug único
-            $ck = $db->prepare('SELECT id FROM tenants WHERE slug=? LIMIT 1');
-            $ck->execute([$slug]);
-            if ($ck->fetch()) {
-                $msg = 'Slug já em uso. Escolha outro.'; $msgType = 'error';
+
+            // 1. Verifica slug único
+            $ckSlug = $db->prepare('SELECT id FROM tenants WHERE slug=? LIMIT 1');
+            $ckSlug->execute([$slug]);
+            $slugExiste = $ckSlug->fetch();
+
+            // 2. Verifica se usuário já existe em qualquer tenant
+            $ckUser = $db->prepare(
+                'SELECT a.usuario, t.nome_politico FROM administradores a
+                 INNER JOIN tenants t ON t.id = a.tenant_id
+                 WHERE a.usuario = ? LIMIT 1'
+            );
+            $ckUser->execute([$aUsuario]);
+            $userExiste = $ckUser->fetch();
+
+            if ($slugExiste) {
+                $msg = 'Slug <strong>' . htmlspecialchars($slug) . '</strong> já está em uso. Escolha outro.';
+                $msgType = 'error';
+            } elseif ($userExiste) {
+                $msg = 'Usuário <strong>' . htmlspecialchars($aUsuario) . '</strong> já existe no sistema'
+                     . ' (tenant: <em>' . htmlspecialchars($userExiste['nome_politico']) . '</em>).'
+                     . ' Use um nome de usuário diferente.';
+                $msgType = 'error';
             } else {
                 try {
                     $db->beginTransaction();
@@ -61,7 +79,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                     $db->commit();
                     logActivity(0, 'tenant_criado', "Tenant: $nome ($slug)");
-                    $msg = "Tenant \"$nome\" criado! Link: " . PLATFORM_URL . "/$slug/"; $msgType = 'success';
+                    $msg = "Tenant \"$nome\" criado com sucesso! Link: " . PLATFORM_URL . "/polix/$slug/admin/";
+                    $msgType = 'success';
                 } catch (Exception $e) {
                     $db->rollBack();
                     error_log('PoLiX create_tenant: ' . $e->getMessage());
@@ -214,8 +233,10 @@ tr:hover td{background:#252540}
           <div class="fg"><label>Cargo *</label>
             <input type="text" name="cargo" required placeholder="Ex: Deputado Estadual"></div>
           <div class="fg"><label>Slug da URL * <small style="color:#666">(apenas letras/números/hífen)</small></label>
-            <input type="text" name="slug" required placeholder="joao-silva" pattern="[a-z0-9\-]{3,60}"
-                   oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9\-]/g,'')"></div>
+            <input type="text" name="slug" id="slugInput" required placeholder="joao-silva" pattern="[a-z0-9\-]{3,60}"
+                   oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9\-]/g,'');verificarSlug(this.value)">
+            <span id="slugFeedback" style="font-size:.75rem;margin-top:3px;display:none"></span>
+          </div>
           <div class="fg"><label>Partido</label>
             <input type="text" name="partido" placeholder="MDB, PT, PSD..."></div>
           <div class="fg"><label>Estado</label>
@@ -246,7 +267,10 @@ tr:hover td{background:#252540}
           <hr class="sep">
           <div class="sep-label">Administrador Inicial</div>
           <div class="fg"><label>Usuário Admin *</label>
-            <input type="text" name="admin_usuario" required placeholder="admin"></div>
+            <input type="text" name="admin_usuario" id="adminUsuario" required placeholder="admin"
+                   autocomplete="off" oninput="verificarUsuario(this.value)">
+            <span id="usuarioFeedback" style="font-size:.75rem;margin-top:3px;display:none"></span>
+          </div>
           <div class="fg"><label>Senha Admin * <small style="color:#666">(mín. 6 chars)</small></label>
             <input type="password" name="admin_senha" required minlength="6"></div>
           <div class="fg"><label>Nome do Admin</label>
@@ -285,7 +309,7 @@ tr:hover td{background:#252540}
         <td>
           <div style="font-weight:700;color:#e0e0e0"><?= htmlspecialchars($t['nome_politico']) ?></div>
           <div style="font-size:.78rem;color:#888"><?= htmlspecialchars($t['cargo']) ?><?php if($t['partido']): ?> · <?= htmlspecialchars($t['partido']) ?><?php endif ?></div>
-          <a class="link-tenant" href="<?= htmlspecialchars(PLATFORM_URL.'/'.$t['slug'].'/') ?>" target="_blank">
+          <a class="link-tenant" href="<?= htmlspecialchars(PLATFORM_URL.PLATFORM_SUBDIR.'/'.$t['slug'].'/') ?>" target="_blank">
             🔗 /<?= htmlspecialchars($t['slug']) ?>/
           </a>
         </td>
@@ -299,7 +323,7 @@ tr:hover td{background:#252540}
         </td>
         <td style="font-size:.78rem;color:#888;white-space:nowrap"><?= formatDate($t['data_criacao']) ?></td>
         <td style="white-space:nowrap">
-          <a class="act-btn" href="<?= htmlspecialchars(PLATFORM_URL.'/'.$t['slug'].'/admin/') ?>" target="_blank" title="Abrir Admin">🔐</a>
+          <a class="act-btn" href="<?= htmlspecialchars(PLATFORM_URL.PLATFORM_SUBDIR.'/'.$t['slug'].'/admin/') ?>" target="_blank" title="Abrir Admin">🔐</a>
           <!-- Toggle status -->
           <form method="POST" style="display:inline">
             <input type="hidden" name="action" value="toggle_tenant">
@@ -332,6 +356,65 @@ tr:hover td{background:#252540}
 function toggleForm(){
   const w = document.getElementById('formWrap');
   w.classList.toggle('hidden');
+  if(!w.classList.contains('hidden')){
+    document.getElementById('adminUsuario') && document.getElementById('adminUsuario').focus();
+  }
+}
+
+// --- Verificação de usuário em tempo real ------------------------------------
+let timerUser;
+function verificarUsuario(val){
+  val = val.trim();
+  const fb = document.getElementById('usuarioFeedback');
+  clearTimeout(timerUser);
+  if(val.length < 3){ fb.style.display='none'; return; }
+
+  fb.style.display = 'block';
+  fb.style.color   = '#888';
+  fb.textContent   = '⏳ Verificando...';
+
+  timerUser = setTimeout(()=>{
+    fetch('verificar_disponibilidade.php?tipo=usuario&valor=' + encodeURIComponent(val))
+      .then(r=>r.json())
+      .then(d=>{
+        if(d.disponivel){
+          fb.style.color   = '#2e7d32';
+          fb.textContent   = '✅ Usuário disponível';
+        } else {
+          fb.style.color   = '#b71c1c';
+          fb.textContent   = '❌ Usuário já existe em: ' + (d.tenant || 'outro cliente');
+        }
+      })
+      .catch(()=>{ fb.style.display='none'; });
+  }, 500);
+}
+
+// --- Verificação de slug em tempo real ----------------------------------------
+let timerSlug;
+function verificarSlug(val){
+  val = val.trim();
+  const fb = document.getElementById('slugFeedback');
+  clearTimeout(timerSlug);
+  if(val.length < 3){ fb.style.display='none'; return; }
+
+  fb.style.display = 'block';
+  fb.style.color   = '#888';
+  fb.textContent   = '⏳ Verificando...';
+
+  timerSlug = setTimeout(()=>{
+    fetch('verificar_disponibilidade.php?tipo=slug&valor=' + encodeURIComponent(val))
+      .then(r=>r.json())
+      .then(d=>{
+        if(d.disponivel){
+          fb.style.color   = '#2e7d32';
+          fb.textContent   = '✅ Slug disponível — link: <?= PLATFORM_URL ?>/polix/' + val + '/admin/';
+        } else {
+          fb.style.color   = '#b71c1c';
+          fb.textContent   = '❌ Slug já em uso. Escolha outro.';
+        }
+      })
+      .catch(()=>{ fb.style.display='none'; });
+  }, 500);
 }
 </script>
 </body>

@@ -6,6 +6,6 @@ if ($tenant && !empty($_SESSION[SESSION_TENANT_ADMIN])) {
 }
 unset($_SESSION[SESSION_TENANT_ADMIN]);
 session_regenerate_id(true);
-$slug = $tenant['slug'] ?? '';
-header('Location: ' . ($slug ? tenantUrl($tenant, 'admin/login?logout=1') : '/'));
+// Volta para o login CENTRALIZADO
+header('Location: ' . PLATFORM_URL . PLATFORM_SUBDIR . '/?logout=1');
 exit;

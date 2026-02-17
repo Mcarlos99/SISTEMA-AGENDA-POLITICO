@@ -20,18 +20,7 @@ define('DB_CHARSET', 'utf8mb4');
 define('PLATFORM_NAME',    'Extreme - PoLiX');
 define('PLATFORM_SUBTITLE','Agenda Política Profissional');
 define('PLATFORM_VERSION', '3.0.0');
-define('PLATFORM_URL',     'https://extremesti.com.br'); // ⚠️ altere para seu domínio, sem barra final
-
-// Subdiretório detectado automaticamente pelo dispatcher (index.php).
-// Só defina manualmente se NÃO usar o dispatcher:
-//   Ex: raiz do domínio  → define('PLATFORM_SUBDIR', '');
-//   Ex: em /polix/       → define('PLATFORM_SUBDIR', '/polix');
-if (!defined('PLATFORM_SUBDIR')) {
-    // Tenta detectar pelo SCRIPT_NAME (funciona quando chamado via dispatcher)
-    $__dir = rtrim(dirname($_SERVER['SCRIPT_NAME'] ?? ''), '/');
-    define('PLATFORM_SUBDIR', $__dir === '/' ? '' : $__dir);
-    unset($__dir);
-}
+define('PLATFORM_URL',     'https://extremesti.com.br/polix'); // sem barra final
 define('TIMEZONE',         'America/Sao_Paulo');
 
 // ============================================================
@@ -194,11 +183,7 @@ function calcularIdade(string $dob): int {
 }
 
 function tenantUrl(array $tenant, string $path = ''): string {
-    return PLATFORM_URL . PLATFORM_SUBDIR . '/' . $tenant['slug'] . '/' . ltrim($path, '/');
-}
-
-function platformUrl(string $path = ''): string {
-    return PLATFORM_URL . PLATFORM_SUBDIR . '/' . ltrim($path, '/');
+    return PLATFORM_URL . '/' . $tenant['slug'] . '/' . ltrim($path, '/');
 }
 
 // ============================================================

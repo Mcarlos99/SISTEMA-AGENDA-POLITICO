@@ -14,7 +14,7 @@ $tenantId = (int)$tenant['id'];
 // --- Autenticação --------------------------------------------------------------
 if (empty($_SESSION[SESSION_TENANT_ADMIN]['tenant_id'])
     || $_SESSION[SESSION_TENANT_ADMIN]['tenant_id'] !== $tenantId) {
-    header('Location: ' . tenantUrl($tenant, 'admin/login'));
+    header('Location: ' . platformUrl(''));
     exit;
 }
 $adminNivel = $_SESSION[SESSION_TENANT_ADMIN]['nivel'] ?? 'operador';
